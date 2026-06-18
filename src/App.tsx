@@ -7,16 +7,12 @@ import React, { useState, useEffect } from 'react';
 import Home from './components/Home';
 import About from './components/About';
 import Services from './components/Services';
-import Projects from './components/Projects';
 import Courses from './components/Courses';
-import Blog from './components/Blog';
-import Contact from './components/Contact';
 import Auth from './components/Auth';
 import StudentDashboard from './components/StudentDashboard';
 import AdminDashboard from './components/AdminDashboard';
 import { Student, Admin } from './types';
 import { 
-  Laptop, 
   Menu, 
   X, 
   Moon, 
@@ -25,7 +21,6 @@ import {
   Mail, 
   ArrowUp, 
   MessageCircle, 
-  CheckCircle, 
   ChevronRight,
   ShieldCheck,
   UserCheck
@@ -36,6 +31,9 @@ export default function App() {
   const [darkMode, setDarkMode] = useState<boolean>(false);
   const [hamburger, setHamburger] = useState<boolean>(false);
   const [backToTop, setBackToTop] = useState<boolean>(false);
+
+  // Unified student portal login/register mode
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'admin-login'>('login');
 
   // Auth User Sessions
   const [currentUser, setCurrentUser] = useState<Student | null>(null);
@@ -82,8 +80,9 @@ export default function App() {
 
   // Handle auto applications selection trigger from Homepage and course cards
   const handleApplyCourseFlow = (courseTitle: string) => {
-    setPage('register');
-    // We can handle state initialization inside registration components automatically
+    setAuthMode('register');
+    setPage('student-portal');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleLogout = () => {
@@ -102,10 +101,12 @@ export default function App() {
     window.open(`https://wa.me/2348135402154?text=${text}`, '_blank');
   };
 
+  const isPortalActive = page === 'student-portal';
+
   return (
     <div className={`min-h-screen flex flex-col bg-slate-50 transition-colors duration-300 ${darkMode ? 'bg-slate-900 text-white' : 'text-slate-800'}`}>
       
-      {/* Upper informational topbar */}
+      {/* Upper info topbar */}
       <div className="bg-brand-primary text-gray-300 text-xs py-2 px-6 flex justify-between items-center border-b border-white/5 relative z-50">
         <div className="flex gap-4 items-center">
           <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5 text-brand-secondary" /> +234 813 540 2154</span>
@@ -127,12 +128,12 @@ export default function App() {
       </div>
 
       {/* Main Structural Sticky Header */}
-      <header className="sticky top-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-250 dark:border-slate-800 z-40 transition-colors">
+      <header className="sticky top-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 z-40 transition-colors">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           
-          {/* Logo Brand Brandings */}
+          {/* Logo brand */}
           <div 
-            onClick={() => { if (!currentUser && !currentAdmin) setPage('home'); }}
+            onClick={() => { if (!currentUser && !currentAdmin) { setPage('home'); window.scrollTo({ top: 0, behavior: 'smooth' }); } }}
             className="flex items-center gap-2.5 cursor-pointer"
           >
             <div className="w-10 h-10 rounded-xl bg-brand-primary text-brand-secondary flex items-center justify-center font-bold text-lg font-display tracking-tight shadow-md">
@@ -144,25 +145,31 @@ export default function App() {
             </div>
           </div>
 
-          {/* Navigational menus (Only if not logged into private portals) */}
+          {/* Core Navigational Menu (Exactly 5 public pages) */}
           {!currentUser && !currentAdmin ? (
             <>
-              {/* Desktop menu */}
+              {/* Desktop Menu */}
               <nav className="hidden lg:flex items-center gap-6 font-semibold text-sm">
                 {[
                   { id: 'home', label: 'Home' },
                   { id: 'about', label: 'About Us' },
-                  { id: 'services', label: 'Services' },
-                  { id: 'projects', label: 'Projects' },
+                  { id: 'services', label: 'Our Services' },
                   { id: 'courses', label: 'Courses' },
-                  { id: 'blog', label: 'Blog' },
-                  { id: 'contact', label: 'Contact Us' }
+                  { id: 'student-portal', label: 'Student Portal' }
                 ].map((m) => (
                   <button 
                     key={m.id}
-                    onClick={() => { setPage(m.id); window.scrollTo({ top: 0 }); }}
+                    onClick={() => { 
+                      if (m.id === 'student-portal') {
+                        setAuthMode('login');
+                      }
+                      setPage(m.id); 
+                      window.scrollTo({ top: 0 }); 
+                    }}
                     className={`transition hover:text-brand-secondary cursor-pointer ${
-                      page === m.id ? 'text-brand-secondary font-bold border-b-2 border-brand-secondary pb-1' : 'text-slate-600 dark:text-gray-300'
+                      page === m.id || (m.id === 'student-portal' && isPortalActive)
+                        ? 'text-brand-secondary font-bold border-b-2 border-brand-secondary pb-1' 
+                        : 'text-slate-600 dark:text-gray-300'
                     }`}
                   >
                     {m.label}
@@ -170,28 +177,28 @@ export default function App() {
                 ))}
               </nav>
 
-              {/* Desktop Right action nodes */}
+              {/* Desktop Headers action triggers */}
               <div className="hidden lg:flex items-center gap-3">
                 <button 
                   id="header-student-login-trigger"
-                  onClick={() => { setPage('login'); window.scrollTo({ top: 0 }); }}
+                  onClick={() => { setAuthMode('login'); setPage('student-portal'); window.scrollTo({ top: 0 }); }}
                   className="px-4 py-2.5 bg-brand-accent dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-white text-xs font-bold rounded-xl transition cursor-pointer"
                 >
                   Student Login
                 </button>
                 <button 
                   id="header-portal-register-trigger"
-                  onClick={() => { setPage('register'); window.scrollTo({ top: 0 }); }}
+                  onClick={() => { setAuthMode('register'); setPage('student-portal'); window.scrollTo({ top: 0 }); }}
                   className="px-4.5 py-2.5 bg-brand-primary hover:bg-brand-secondary text-white hover:text-brand-primary text-xs font-bold rounded-xl transition cursor-pointer border border-brand-primary shadow-sm"
                 >
                   Apply Online
                 </button>
               </div>
 
-              {/* Hamburger launcher item */}
+              {/* Hambuger menu trigger */}
               <button 
                 onClick={() => setHamburger(!hamburger)}
-                className="lg:hidden p-2 text-slate-600 dark:text-white hover:text-brand-secondary transition"
+                className="lg:hidden p-2 text-slate-600 dark:text-white hover:text-brand-secondary transition cursor-pointer"
               >
                 {hamburger ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
               </button>
@@ -210,6 +217,12 @@ export default function App() {
                   <span className="text-slate-600 dark:text-slate-300">Admin terminal active</span>
                 </div>
               )}
+              <button 
+                onClick={handleLogout}
+                className="px-3 py-1.5 bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold rounded-lg transition cursor-pointer"
+              >
+                Log Out
+              </button>
             </div>
           )}
 
@@ -222,17 +235,24 @@ export default function App() {
               {[
                 { id: 'home', label: 'Home' },
                 { id: 'about', label: 'About Us' },
-                { id: 'services', label: 'Services' },
-                { id: 'projects', label: 'Projects' },
+                { id: 'services', label: 'Our Services' },
                 { id: 'courses', label: 'Courses' },
-                { id: 'blog', label: 'Blog' },
-                { id: 'contact', label: 'Contact Us' }
+                { id: 'student-portal', label: 'Student Portal' }
               ].map((m) => (
                 <button 
                   key={m.id}
-                  onClick={() => { setPage(m.id); setHamburger(false); window.scrollTo({ top: 0 }); }}
+                  onClick={() => { 
+                    if (m.id === 'student-portal') {
+                      setAuthMode('login');
+                    }
+                    setPage(m.id); 
+                    setHamburger(false); 
+                    window.scrollTo({ top: 0 }); 
+                  }}
                   className={`text-left text-sm py-2 font-semibold transition ${
-                    page === m.id ? 'text-brand-secondary' : 'text-slate-600 dark:text-gray-300'
+                    page === m.id || (m.id === 'student-portal' && isPortalActive)
+                      ? 'text-brand-secondary' 
+                      : 'text-slate-600 dark:text-gray-300'
                   }`}
                 >
                   · {m.label}
@@ -242,14 +262,14 @@ export default function App() {
 
             <div className="pt-4 border-t border-slate-150 dark:border-slate-850 flex flex-col gap-3">
               <button 
-                onClick={() => { setPage('login'); setHamburger(false); window.scrollTo({ top: 0 }); }}
-                className="w-full text-center py-2.5 bg-brand-accent dark:bg-slate-800 text-slate-700 dark:text-white font-bold rounded-xl text-xs"
+                onClick={() => { setAuthMode('login'); setPage('student-portal'); setHamburger(false); window.scrollTo({ top: 0 }); }}
+                className="w-full text-center py-2.5 bg-brand-accent dark:bg-slate-800 text-slate-700 dark:text-white font-bold rounded-xl text-xs cursor-pointer"
               >
                 Student Login
               </button>
               <button 
-                onClick={() => { setPage('register'); setHamburger(false); window.scrollTo({ top: 0 }); }}
-                className="w-full text-center py-2.5 bg-brand-primary text-white font-bold rounded-xl text-xs"
+                onClick={() => { setAuthMode('register'); setPage('student-portal'); setHamburger(false); window.scrollTo({ top: 0 }); }}
+                className="w-full text-center py-2.5 bg-brand-primary text-white font-bold rounded-xl text-xs cursor-pointer"
               >
                 Apply Online
               </button>
@@ -287,34 +307,23 @@ export default function App() {
             )}
             {page === 'about' && <About />}
             {page === 'services' && <Services />}
-            {page === 'projects' && <Projects />}
             {page === 'courses' && (
               <Courses 
                 onNavigate={(destination) => setPage(destination)}
                 onApplyCourse={(title) => {
-                  setPage('register');
+                  setAuthMode('register');
+                  setPage('student-portal');
                   window.scrollTo({ top: 0 });
                 }}
               />
             )}
-            {page === 'blog' && <Blog />}
-            {page === 'contact' && <Contact />}
             
-            {/* Authentications panel triggers */}
-            {page === 'login' && (
+            {/* Unified Student Portal holding login, register, and admin-login */}
+            {isPortalActive && (
               <Auth 
                 onLoginSuccess={(stu) => { setCurrentUser(stu); setPage('dashboard'); }}
                 onAdminLoginSuccess={(adm) => { setCurrentAdmin(adm); setPage('admin'); }}
-                initialMode="login"
-                courses={globalCourses}
-              />
-            )}
-
-            {page === 'register' && (
-              <Auth 
-                onLoginSuccess={(stu) => { setCurrentUser(stu); setPage('dashboard'); }}
-                onAdminLoginSuccess={(adm) => { setCurrentAdmin(adm); setPage('admin'); }}
-                initialMode="register"
+                initialMode={authMode}
                 courses={globalCourses}
               />
             )}
@@ -340,7 +349,7 @@ export default function App() {
           <button 
             onClick={handleScrollTop}
             className="w-12 h-12 bg-slate-900 dark:bg-white text-white dark:text-slate-950 hover:bg-brand-secondary hover:text-white rounded-full flex items-center justify-center shadow-lg transition duration-200 cursor-pointer"
-            title="Scoll back to top of page"
+            title="Scroll back to top"
           >
             <ArrowUp className="w-5 h-5" />
           </button>
@@ -357,7 +366,7 @@ export default function App() {
               <span className="font-bold text-white text-sm">EJaytech Concepts</span>
             </div>
             <p className="text-xs text-gray-400 leading-relaxed font-medium">
-              Innovating Ideas, Delivering Solutions. Custom web portals training tracks build to prepare Africa for next-generation tech.
+              Innovating Ideas, Delivering Solutions. Custom web portals and technical training tracks built carefully to empower growing digital frontiers.
             </p>
           </div>
 
@@ -367,17 +376,24 @@ export default function App() {
               {[
                 { id: 'home', label: 'Home' },
                 { id: 'about', label: 'About Us' },
-                { id: 'services', label: 'Services' },
-                { id: 'projects', label: 'Projects' },
-                { id: 'courses', label: 'Courses Portfolio' },
-                { id: 'blog', label: 'News Insights' }
+                { id: 'services', label: 'Our Services' },
+                { id: 'courses', label: 'Training Courses' },
+                { id: 'student-portal', label: 'Student Portal Access' }
               ].map(lnk => (
                 <button 
                   key={lnk.id}
-                  onClick={() => { if (!currentUser && !currentAdmin) { setPage(lnk.id); window.scrollTo({ top: 0, behavior: 'smooth'}); } }}
+                  onClick={() => { 
+                    if (!currentUser && !currentAdmin) { 
+                      if (lnk.id === 'student-portal') {
+                        setAuthMode('login');
+                      }
+                      setPage(lnk.id); 
+                      window.scrollTo({ top: 0, behavior: 'smooth'}); 
+                    } 
+                  }}
                   className="text-left hover:text-white transition cursor-pointer"
                 >
-                  {lnk.label}
+                  · {lnk.label}
                 </button>
               ))}
             </div>
@@ -385,27 +401,36 @@ export default function App() {
 
           <div className="space-y-4">
             <h4 className="text-white text-xs font-bold uppercase tracking-wider">Services Stack</h4>
-            <div className="flex flex-col gap-2.5 text-xs text-gray-450">
-              <span className="flex items-center gap-1"><ChevronRight className="w-3 h-3 text-brand-secondary" /> Business & School Portals</span>
-              <span className="flex items-center gap-1"><ChevronRight className="w-3 h-3 text-brand-secondary" /> Church Websites Redesigns</span>
-              <span className="flex items-center gap-1"><ChevronRight className="w-3 h-3 text-brand-secondary" /> Logo Identity & Print Ads</span>
-              <span className="flex items-center gap-1"><ChevronRight className="w-3 h-3 text-brand-secondary" /> Tech Consultancy & Training</span>
+            <div className="flex flex-col gap-2 text-xs">
+              <span className="flex items-center gap-1"><ChevronRight className="w-3 h-3 text-brand-secondary" /> Web Portals Development</span>
+              <span className="flex items-center gap-1"><ChevronRight className="w-3 h-3 text-brand-secondary" /> Style Logo Brandings</span>
+              <span className="flex items-center gap-1"><ChevronRight className="w-3 h-3 text-brand-secondary" /> Interactive UI/UX Wireframing</span>
+              <span className="flex items-center gap-1"><ChevronRight className="w-3 h-3 text-brand-secondary" /> Advanced Certified Trainings</span>
             </div>
           </div>
 
           <div className="space-y-4">
             <h4 className="text-white text-xs font-bold uppercase tracking-wider">Corporate Secretariat</h4>
-            <p className="text-xs text-gray-400 leading-relaxed">
+            <p className="text-xs text-gray-400 leading-relaxed font-medium">
               No. 12 Capital Plaza, Suite 4B, Garki, Abuja, Nigeria. 
             </p>
             <p className="text-xs font-semibold text-brand-secondary mt-1">
-              Call lines: +234 813 540 2154
+              Main Line: +234 813 540 2154
             </p>
+            <div className="pt-2 text-xs">
+              {/* Backdoor for administrators logins */}
+              <button 
+                onClick={() => { setAuthMode('admin-login'); setPage('student-portal'); window.scrollTo({ top: 0, behavior: 'smooth'}); }}
+                className="text-[10px] text-gray-500 hover:text-brand-secondary font-mono uppercase bg-white/5 px-2 py-1 rounded transition border border-white/5 cursor-pointer"
+              >
+                Admin Terminal Secure Login
+              </button>
+            </div>
           </div>
 
         </div>
 
-        <div className="max-w-7xl mx-auto border-t border-white/5 mt-12 pt-6 text-center text-xs text-gray-400">
+        <div className="max-w-7xl mx-auto border-t border-white/5 mt-12 pt-6 text-center text-xs text-gray-500 font-mono">
           <p>Copyright © 2026 EJaytech Concepts. All Rights Reserved. Fully Encrypted.</p>
         </div>
       </footer>
