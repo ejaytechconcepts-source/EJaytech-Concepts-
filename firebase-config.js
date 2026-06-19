@@ -49,7 +49,16 @@ if (!isRealFirebase) {
       {
         uid: "admin-master",
         email: "admin@ejaytech.com",
-        username: "EJaytech Chief Admin"
+        username: "EJaytech Chief Admin",
+        profilePictureUrl: "",
+        darkModeEnabled: false,
+        websiteSettings: {
+          siteName: "EJaytech Concepts",
+          contactPhone: "07033719342",
+          contactEmail: "ejaytechconcepts@gmail.com",
+          headOfficeAddress: "04 Akande Oke Street, Eleweran, Abeokuta"
+        },
+        createdAt: new Date().toISOString()
       }
     ];
     localStorage.setItem("mock_admins", JSON.stringify(defaultAdmins));
@@ -59,11 +68,15 @@ if (!isRealFirebase) {
     const defaultCourses = [
       {
         id: "course-1",
+        courseName: "Frontend Web Development",
         title: "Frontend Web Development",
         description: "Master building high-performance modern web apps with HTML5, CSS3, JavaScript, and Bootstrap 5.",
         duration: "12 Weeks",
         fee: "₦120,000",
         requirements: "Personal laptop (at least 4GB RAM), and commitment to 6 hours classes weekly.",
+        learningOutcomes: "Build responsive websites, master modern JavaScript, and deploy apps.",
+        courseImage: "https://images.unsplash.com/photo-1547082299-de196ea013d6?w=800&auto=format&fit=crop&q=60",
+        isArchived: false,
         syllabus: [
           "HTML5 Semantics & Structure",
           "CSS3 Layouts, Flexbox, Grid & Animations",
@@ -76,11 +89,15 @@ if (!isRealFirebase) {
       },
       {
         id: "course-2",
+        courseName: "Graphic Design",
         title: "Graphic Design",
         description: "Cultivate your professional design eyes and master visual artwork with Canva Pro and Photoshop.",
         duration: "8 Weeks",
         fee: "₦80,000",
         requirements: "Personal web-enabled computer, Figma, or Photoshop application installed.",
+        learningOutcomes: "Become a proficient graphic designer with production grade portfolios.",
+        courseImage: "https://images.unsplash.com/photo-1626785774573-4b799315345d?w=800&auto=format&fit=crop&q=60",
+        isArchived: false,
         syllabus: [
           "Layout theory, typography mappings, and visual hierarchies",
           "Canva Pro composition, templating, and rapid flyer creations",
@@ -92,11 +109,15 @@ if (!isRealFirebase) {
       },
       {
         id: "course-3",
+        courseName: "UI/UX Design",
         title: "UI/UX Design",
         description: "Master modern user research techniques, interactive wireframing, styling presets, and prototyping with Figma.",
         duration: "10 Weeks",
         fee: "₦100,000",
         requirements: "Laptop (8GB RAM recommended), Figma account, and creative workflows.",
+        learningOutcomes: "Build beautiful layouts, construct comprehensive wireframes and conduct user tests.",
+        courseImage: "https://images.unsplash.com/photo-1586717791821-3f44a563fa4c?w=800&auto=format&fit=crop&q=60",
+        isArchived: false,
         syllabus: [
           "User persona formulations, empathy labs, and journey charting",
           "Low-fidelity structural wireframing (skeletal drawings)",
@@ -108,11 +129,15 @@ if (!isRealFirebase) {
       },
       {
         id: "course-4",
+        courseName: "Digital Skills & Freelancing",
         title: "Digital Skills & Freelancing",
         description: "Learn to market and monetize your digital design, supporting, or software developments in global channels.",
         duration: "6 Weeks",
         fee: "₦60,000",
         requirements: "A smartphone or basic PC, and an open mind.",
+        learningOutcomes: "Earn from digital skills using Upwork, LinkedIn, and Fiverr platforms.",
+        courseImage: "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=800&auto=format&fit=crop&q=60",
+        isArchived: false,
         syllabus: [
           "Freelance profiling (Upwork, Fiverr accounts setups)",
           "Portfolio page creation and customized proposals development",
@@ -125,6 +150,18 @@ if (!isRealFirebase) {
     localStorage.setItem("mock_courses", JSON.stringify(defaultCourses));
   }
 
+  if (!localStorage.getItem("mock_announcements")) {
+    const defaultAnns = [
+      {
+        id: "ann-default-1",
+        title: "EJaytech Concepts Abeokuta Physical Training Center",
+        message: "We are pleased to introduce our fully integrated administrative and vocational student panel systems. Learn modern graphics fabrication, Figma prototypes, or frontend programming from scratch.",
+        createdAt: new Date().toISOString()
+      }
+    ];
+    localStorage.setItem("mock_announcements", JSON.stringify(defaultAnns));
+  }
+
   if (!localStorage.getItem("mock_notifications")) {
     const defaultNotifs = [
       {
@@ -133,6 +170,7 @@ if (!isRealFirebase) {
         title: "Welcome to EJaytech Concepts!",
         message: "We have unlocked specialized vocational design and programming tracks. Explore courses and register today to begin a tech career.",
         status: "unread",
+        type: "General Notice",
         createdAt: new Date().toISOString()
       }
     ];

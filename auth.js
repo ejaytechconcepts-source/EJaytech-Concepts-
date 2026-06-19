@@ -64,9 +64,26 @@ async function registerStudentAccount(data) {
 async function loginUserAccount(email, password) {
   const credential = await auth.signInWithEmailAndPassword(email, password);
   const user = credential.user;
+  const normalizedEmail = email.toLowerCase().trim();
   
-  // Check if they are admin
-  if (email.toLowerCase().trim() === "admin@ejaytech.com") {
+  // Check if they are admin in admins collection
+  const adminDoc = await db.collection("admins").doc(user.uid).get();
+  if (adminDoc.exists || normalizedEmail === "admin@ejaytech.com") {
+    if (!adminDoc.exists) {
+      await db.collection("admins").doc(user.uid).set({
+        username: "EJaytech Chief Admin",
+        email: normalizedEmail,
+        profilePictureUrl: "",
+        darkModeEnabled: false,
+        websiteSettings: {
+          siteName: "EJaytech Concepts",
+          contactPhone: "07033719342",
+          contactEmail: "ejaytechconcepts@gmail.com",
+          headOfficeAddress: "04 Akande Oke Street, Eleweran, Abeokuta"
+        },
+        createdAt: new Date().toISOString()
+      });
+    }
     return { user, role: "admin" };
   }
 
@@ -74,7 +91,6 @@ async function loginUserAccount(email, password) {
   const studentDoc = await db.collection("students").doc(user.uid).get();
   
   if (!studentDoc.exists) {
-    // Check if we can find them in collection by search
     throw new Error("Student registration record not found in the database. Please contact support.");
   }
   
@@ -110,12 +126,14 @@ function protectPageAccess(requiredRole) {
     }
 
     if (requiredRole === "admin") {
-      if (user.email !== "admin@ejaytech.com") {
+      const adminDoc = await db.collection("admins").doc(user.uid).get();
+      if (!adminDoc.exists && user.email !== "admin@ejaytech.com") {
         console.warn("Unauthorized administrative access attempt, booting to student page!");
         window.location.href = "student-dashboard.html";
       }
     } else if (requiredRole === "student") {
-      if (user.email === "admin@ejaytech.com") {
+      const adminDoc = await db.collection("admins").doc(user.uid).get();
+      if (adminDoc.exists || user.email === "admin@ejaytech.com") {
         window.location.href = "admin-dashboard.html";
         return;
       }
@@ -141,3 +159,107 @@ function protectPageAccess(requiredRole) {
     }
   });
 }
+
+/**
+ * Dynamic Website Settings Replacer
+ * Synchronizes the physical head office, contact phone, and contact email with database overrides.
+ */
+async function applyGlobalSettings() {
+  let settings = {
+    siteName: "EJaytech Concepts",
+    contactPhone: "07033719342",
+    contactEmail: "ejaytechconcepts@gmail.com",
+    headOfficeAddress: "04 Akande Oke Street, Eleweran, Abeokuta"
+  };
+
+  try {
+    let fetched = false;
+    let dat = null;
+    
+    if (auth.currentUser) {
+      const doc = await db.collection("admins").doc(auth.currentUser.uid).get();
+      if (doc.exists && doc.data().websiteSettings) {
+        dat = doc.data().websiteSettings;
+        fetched = true;
+      }
+    }
+    
+    if (!fetched) {
+      const gdoc = await db.collection("admins").doc("admin-master").get();
+      if (gdoc.exists && gdoc.data().websiteSettings) {
+        dat = gdoc.data().websiteSettings;
+        fetched = true;
+      }
+    }
+
+    if (fetched && dat) {
+      settings = dat;
+    }
+  } catch (err) {
+    console.log("Global settings load skipped, falling back to static markup properties.", err);
+  }
+
+  // Safely replace on-screen targets
+  document.querySelectorAll(".settings-sitename").forEach(el => {
+    el.textContent = settings.siteName;
+  });
+  
+  // Phone updater
+  document.querySelectorAll(".settings-phone").forEach(el => {
+    if (el.tagName === "A") {
+      el.href = `tel:${settings.contactPhone}`;
+      if (el.textContent.includes("0703") || el.textContent.includes("+234") || el.querySelector("span") || el.textContent.trim().length > 0) {
+        const icon = el.querySelector("i");
+        if (icon) {
+          el.innerHTML = "";
+          el.appendChild(icon);
+          el.appendChild(document.createTextNode(" " + settings.contactPhone));
+        } else {
+          el.textContent = settings.contactPhone;
+        }
+      }
+    } else {
+      el.textContent = settings.contactPhone;
+    }
+  });
+
+  // Email updater
+  document.querySelectorAll(".settings-email").forEach(el => {
+    if (el.tagName === "A") {
+      el.href = `mailto:${settings.contactEmail}`;
+      if (el.textContent.includes("@") || el.querySelector("span") || el.textContent.trim().length > 0) {
+        const icon = el.querySelector("i");
+         if (icon) {
+          el.innerHTML = "";
+          el.appendChild(icon);
+          el.appendChild(document.createTextNode(" " + settings.contactEmail));
+        } else {
+          el.textContent = settings.contactEmail;
+        }
+      }
+    } else {
+      el.textContent = settings.contactEmail;
+    }
+  });
+
+  // Address updater
+  document.querySelectorAll(".settings-address").forEach(el => {
+    const icon = el.querySelector("i");
+    if (icon) {
+      el.innerHTML = "";
+      el.appendChild(icon);
+      el.appendChild(document.createTextNode(" " + settings.headOfficeAddress));
+    } else {
+      el.textContent = settings.headOfficeAddress;
+    }
+  });
+}
+
+// Automatically invoke on DOM ready and auth updates
+document.addEventListener("DOMContentLoaded", () => {
+  applyGlobalSettings();
+});
+auth.onAuthStateChanged(() => {
+  applyGlobalSettings();
+});
+

@@ -43,7 +43,7 @@ service cloud.firestore {
                       request.resource.data.studentId is string && request.resource.data.studentId.size() <= 30 &&
                       request.resource.data.createdAt == request.time;
 
-      // Allow students to modify specific profile details (excluding locked fields) in one Action-Based branch,
+      // Allow students to modify specific profile details (excluding locked fields),
       // and admins to update everything in the other branch.
       allow update: if (
         isSignedIn() && isOwner(uid) &&
@@ -52,7 +52,9 @@ service cloud.firestore {
         request.resource.data.email == resource.data.email && 
         request.resource.data.createdAt == resource.data.createdAt &&
         request.resource.data.keys().hasAll(resource.data.keys()) &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fullname', 'phone', 'gender', 'dob', 'state', 'address', 'bio', 'lastDocumentSubmitted'])
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'fullname', 'phone', 'gender', 'dob', 'state', 'address', 'bio', 'lastDocumentSubmitted', 'passportPhoto', 'emailVerified'
+        ])
       ) || isAdmin();
 
       allow delete: if isAdmin();
@@ -61,12 +63,24 @@ service cloud.firestore {
     // Dedicated Admins Access whitelist (populated on backend or setup)
     match /admins/{uid} {
       allow read: if isSignedIn();
-      allow write: if false; // Only manageable through authorized command triggers or manual setup
+      allow write: if isOwner(uid) || isAdmin();
     }
 
     // Course Catalogue
     match /courses/{courseId} {
       allow read: if true; // Anyone can read the syllabi and catalogues 
+      allow write: if isAdmin();
+    }
+
+    // Learning Materials
+    match /materials/{materialId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Announcements Notice Board
+    match /announcements/{announcementId} {
+      allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
