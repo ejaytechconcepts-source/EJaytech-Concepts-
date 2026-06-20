@@ -248,6 +248,29 @@
 
   </div>
 
+  <!-- Student Approval Notification Popup Modal -->
+  <div class="modal fade" id="studentApprovalModal" tabindex="-1" aria-labelledby="studentApprovalModalLabel" aria-hidden="true" style="z-index: 1060;">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden text-start" style="background-color: #ffffff; color: #1e293b;">
+        <div class="modal-header border-0 p-4 pb-0 position-relative text-center d-flex flex-column align-items-center">
+          <button type="button" class="btn-close position-absolute top-0 end-0 m-3" data-bs-dismiss="modal" aria-label="Close" id="approval-modal-close-btn"></button>
+          <div class="rounded-circle p-3 mb-2 d-inline-flex justify-content-center align-items-center bg-success-subtle text-success" style="width: 70px; height: 70px; border: 2px solid rgba(16, 185, 129, 0.2);">
+            <i class="bi bi-patch-check-fill text-success" style="font-size: 2.2rem;"></i>
+          </div>
+          <h4 class="modal-title fw-bold font-display text-dark mt-2" id="studentApprovalModalLabel">Application Approved!</h4>
+        </div>
+        <div class="modal-body p-4 text-center">
+          <p class="text-secondary mb-4 leading-relaxed" id="approval-modal-message-text" style="font-size: 1.05rem;">
+            Congratulations! Your application to EJaytech Concepts has been approved. You may now access your student dashboard and learning resources.
+          </p>
+          <button type="button" class="btn btn-success w-100 py-3 fw-bold font-display text-white border-0 shadow-sm" data-bs-dismiss="modal" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+            <i class="bi bi-rocket-takeoff-fill me-2"></i> Get Started
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Firebase Compat CDNs -->
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
@@ -317,6 +340,37 @@
           badge.classList.add("badge-status-approved");
           document.getElementById("pending-status-overlay").classList.add("d-none");
           document.getElementById("classroom-approved-workspace").style.opacity = "1";
+
+          // Check if we should display the approval popup modal (once per login session)
+          const sessionKey = "approval_modal_shown_" + uid;
+          if (sessionStorage.getItem(sessionKey) !== "true") {
+            const approvalModal = new bootstrap.Modal(document.getElementById('studentApprovalModal'));
+            
+            const msgText = document.getElementById("approval-modal-message-text");
+            if (msgText) {
+              msgText.innerHTML = `Congratulations, <strong>${currentStudentData.fullname}</strong>!<br><br>Your application to study <strong>${currentStudentData.course}</strong> at EJaytech Concepts has been approved successfully.<br><br>You can now log in to your student portal and access your course materials and updates.`;
+            }
+
+            approvalModal.show();
+            sessionStorage.setItem(sessionKey, "true");
+
+            // Automatically check and mark any unread approval notification as read
+            setTimeout(async () => {
+              try {
+                const list = await getStudentNotifications(currentStudentData.studentId);
+                const approvalNotif = list.find(n => 
+                  (n.title.toLowerCase().includes("approved") || n.message.toLowerCase().includes("approved")) && 
+                  (n.status === "unread" || n.read === false)
+                );
+                if (approvalNotif) {
+                  await markNotificationAsRead(approvalNotif.id);
+                  await loadDashboardNotifications();
+                }
+              } catch (e) {
+                console.warn("Auto-dismiss approval notification failed:", e);
+              }
+            }, 1200);
+          }
         } else {
           badge.classList.add("badge-status-rejected");
         }
@@ -398,7 +452,7 @@
       try {
         const list = await getStudentNotifications(currentStudentData.studentId);
         
-        const unreadCount = list.filter(n => n.status === "unread").length;
+        const unreadCount = list.filter(n => n.status === "unread" || n.read === false).length;
         badgeCount.className = unreadCount > 0 ? "badge bg-danger ms-1" : "badge bg-secondary ms-1";
         badgeCount.textContent = unreadCount;
 
@@ -412,7 +466,7 @@
 
         let html = "";
         list.forEach(notif => {
-          const isUnread = notif.status === "unread";
+          const isUnread = notif.status === "unread" || notif.read === false;
           html += `
             <div class="p-3 rounded-3 border text-start ${isUnread ? 'border-primary bg-primary-subtle' : 'bg-light'}" id="notif-wrapper-${notif.id}">
               <div class="d-flex justify-content-between align-items-start">

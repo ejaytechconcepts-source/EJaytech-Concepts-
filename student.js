@@ -54,7 +54,7 @@ async function getStudentNotifications(studentId) {
  * Mark a notification as read
  */
 async function markNotificationAsRead(notifId) {
-  await db.collection("notifications").doc(notifId).update({ status: "read" });
+  await db.collection("notifications").doc(notifId).update({ status: "read", read: true });
 }
 
 /**

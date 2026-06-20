@@ -20,36 +20,117 @@ async function getRegisteredStudentsList() {
  * Approve student registration
  */
 async function approveStudentApplication(uid, studentId) {
+  // Update student status inside Firestore
   await db.collection("students").doc(uid).update({ status: "Approved" });
-  
+
+  // Retrieve student details to construct custom email components
+  const studentDoc = await db.collection("students").doc(uid).get();
+  if (!studentDoc.exists) throw new Error("Student profile record not found.");
+  const studentData = studentDoc.data();
+  const studentEmail = studentData.email || "";
+  const studentName = studentData.fullname || "Student";
+  const courseName = studentData.course || "General Software Track";
+
+  const serverTimestamp = (typeof firebase !== "undefined" && firebase.firestore && firebase.firestore.FieldValue)
+    ? firebase.firestore.FieldValue.serverTimestamp()
+    : new Date().toISOString();
+
   // Create success notification record for the approved user
   await db.collection("notifications").add({
     studentId: studentId,
-    title: "Application Approved!",
-    message: "Congratulations! Your registration has been approved. You now have full access to study materials and certification courses.",
+    title: "Application Approved",
+    message: "Congratulations! Your application to EJaytech Concepts has been approved. You may now access your student dashboard and learning resources.",
+    createdAt: serverTimestamp,
+    read: false,
     status: "unread",
-    type: "Approval Notification",
-    createdAt: new Date().toISOString()
+    type: "Approval Notification"
   });
 
-  console.log(`[Email Simulation]: Registration confirmation sent successfully to verified student: ID ${studentId}`);
+  const emailSubject = "Application Approved - EJaytech Concepts";
+  const emailMessage = `Dear ${studentName},
+
+Congratulations!
+
+Your application to EJaytech Concepts has been approved successfully.
+
+You can now log in to your student portal and access your course materials and updates.
+
+Student ID:
+${studentId}
+
+Course:
+${courseName}
+
+Regards,
+EJaytech Concepts`;
+
+  // Standard persistent email database sync log
+  await db.collection("emails").add({
+    to: studentEmail,
+    subject: emailSubject,
+    message: emailMessage,
+    sentAt: new Date().toISOString(),
+    status: "sent"
+  });
+
+  console.group("%c[EJaytech Email Notification Dispatched]", "color: #10b981; font-weight: bold; font-size: 1.15em;");
+  console.log(`To: ${studentEmail}`);
+  console.log(`Subject: ${emailSubject}`);
+  console.log(`Message:\n${emailMessage}`);
+  console.groupEnd();
 }
 
 /**
  * Reject student registration
  */
 async function rejectStudentApplication(uid, studentId) {
+  // Update student status inside Firestore
   await db.collection("students").doc(uid).update({ status: "Rejected" });
-  
-  // Create audit failure warning trigger
+
+  // Retrieve student details to construct custom email components
+  const studentDoc = await db.collection("students").doc(uid).get();
+  if (!studentDoc.exists) throw new Error("Student profile record not found.");
+  const studentData = studentDoc.data();
+  const studentEmail = studentData.email || "";
+  const studentName = studentData.fullname || "Student";
+
+  const serverTimestamp = (typeof firebase !== "undefined" && firebase.firestore && firebase.firestore.FieldValue)
+    ? firebase.firestore.FieldValue.serverTimestamp()
+    : new Date().toISOString();
+
+  // Create notifications record warning logs
   await db.collection("notifications").add({
     studentId: studentId,
-    title: "Application Audited",
-    message: "Your application could not be verified or approved at this time. Please contact our local Capital Plaza Abeokuta office.",
+    title: "Application Not Approved",
+    message: "Thank you for your interest in EJaytech Concepts. Your application was not approved at this time.",
+    createdAt: serverTimestamp,
+    read: false,
     status: "unread",
-    type: "Rejection Notification",
-    createdAt: new Date().toISOString()
+    type: "Rejection Notification"
   });
+
+  const emailSubject = "Application Not Approved";
+  const emailMessage = `Dear ${studentName},
+
+Thank you for your interest in EJaytech Concepts. Your application was not approved at this time.
+
+Regards,
+EJaytech Concepts`;
+
+  // Standard persistent email database sync log
+  await db.collection("emails").add({
+    to: studentEmail,
+    subject: emailSubject,
+    message: emailMessage,
+    sentAt: new Date().toISOString(),
+    status: "sent"
+  });
+
+  console.group("%c[EJaytech Email Notification Dispatched]", "color: #ef4444; font-weight: bold; font-size: 1.15em;");
+  console.log(`To: ${studentEmail}`);
+  console.log(`Subject: ${emailSubject}`);
+  console.log(`Message:\n${emailMessage}`);
+  console.groupEnd();
 }
 
 /**
