@@ -290,53 +290,80 @@
     protectPageAccess("student");
 
     let currentStudentData = null;
+    let studentUnsubscribe = null;
+    let notificationsUnsubscribe = null;
 
     auth.onAuthStateChanged(async (user) => {
       if (user) {
         document.getElementById("user-display-email").textContent = user.email;
-        try {
-          await renderStudentDashboard(user.uid);
-        } catch (err) {
-          console.error("Renderer error:", err);
-        }
+        
+        // Unsubscribe legacy queries
+        if (studentUnsubscribe) studentUnsubscribe();
+        if (notificationsUnsubscribe) notificationsUnsubscribe();
+
+        // Establish real-time observer of student doc in Firestore
+        studentUnsubscribe = db.collection("students").doc(user.uid).onSnapshot(async (doc) => {
+          if (doc.exists) {
+            const data = doc.data();
+            currentStudentData = data;
+            await renderStudentDashboardWithData(data, user.uid);
+          }
+        }, (err) => {
+          console.error("Student profile real-time listening error:", err);
+        });
+      } else {
+        if (studentUnsubscribe) { studentUnsubscribe(); studentUnsubscribe = null; }
+        if (notificationsUnsubscribe) { notificationsUnsubscribe(); notificationsUnsubscribe = null; }
       }
     });
 
     /**
-     * Primary renderer
+     * Legacy/Helper Fetch-Once function kept for Event Handlers / Forms
      */
     async function renderStudentDashboard(uid) {
       try {
-        currentStudentData = await getStudentProfile(uid);
+        const data = await getStudentProfile(uid);
+        await renderStudentDashboardWithData(data, uid);
+      } catch (err) {
+        console.error("renderStudentDashboard failure:", err);
+      }
+    }
+
+    /**
+     * Primary renderer using live/incoming document data
+     */
+    async function renderStudentDashboardWithData(data, uid) {
+      try {
+        currentStudentData = data;
         
         // Hide loader, show grid
         document.getElementById("dash-loading-screen").classList.add("d-none");
         document.getElementById("active-dashboard-grid").classList.remove("d-none");
 
         // Display basic variables on profile card
-        document.getElementById("student-fullname-display").textContent = currentStudentData.fullname;
-        document.getElementById("student-id-display").textContent = currentStudentData.studentId;
-        document.getElementById("student-course-display").textContent = currentStudentData.course;
-        document.getElementById("student-email-display").textContent = currentStudentData.email;
-        document.getElementById("student-phone-display").textContent = currentStudentData.phone;
-        document.getElementById("student-dob-display").textContent = currentStudentData.dob;
-        document.getElementById("student-bio-display").textContent = currentStudentData.bio || "No custom bio statement specified. Edit your profile to tell us about your digital goals!";
+        document.getElementById("student-fullname-display").textContent = data.fullname || "Student";
+        document.getElementById("student-id-display").textContent = data.studentId || "";
+        document.getElementById("student-course-display").textContent = data.course || "Pending";
+        document.getElementById("student-email-display").textContent = data.email || "";
+        document.getElementById("student-phone-display").textContent = data.phone || "";
+        document.getElementById("student-dob-display").textContent = data.dob || "";
+        document.getElementById("student-bio-display").textContent = data.bio || "No custom bio statement specified. Edit your profile to tell us about your digital goals!";
         
         // Set initials avatar
-        const initials = currentStudentData.fullname.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+        const initials = data.fullname ? data.fullname.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : "ST";
         document.getElementById("student-avatar").textContent = initials;
 
         // Dynamic badges
         const badge = document.getElementById("student-status-badge");
         badge.className = "badge border badge-status";
-        badge.textContent = currentStudentData.status;
+        badge.textContent = data.status;
 
-        if (currentStudentData.status === "Pending") {
+        if (data.status === "Pending") {
           badge.classList.add("badge-status-pending");
           document.getElementById("pending-status-overlay").classList.remove("d-none");
           // Limit classroom tabs in pending state by blurring container
           document.getElementById("classroom-approved-workspace").style.opacity = "0.75";
-        } else if (currentStudentData.status === "Approved") {
+        } else if (data.status === "Approved") {
           badge.classList.add("badge-status-approved");
           document.getElementById("pending-status-overlay").classList.add("d-none");
           document.getElementById("classroom-approved-workspace").style.opacity = "1";
@@ -348,7 +375,7 @@
             
             const msgText = document.getElementById("approval-modal-message-text");
             if (msgText) {
-              msgText.innerHTML = `Congratulations, <strong>${currentStudentData.fullname}</strong>!<br><br>Your application to study <strong>${currentStudentData.course}</strong> at EJaytech Concepts has been approved successfully.<br><br>You can now log in to your student portal and access your course materials and updates.`;
+              msgText.innerHTML = `Your application has been approved successfully.<br><br>Welcome to EJaytech Concepts.`;
             }
 
             approvalModal.show();
@@ -357,14 +384,14 @@
             // Automatically check and mark any unread approval notification as read
             setTimeout(async () => {
               try {
-                const list = await getStudentNotifications(currentStudentData.studentId);
+                const list = await getStudentNotifications(data.studentId);
                 const approvalNotif = list.find(n => 
                   (n.title.toLowerCase().includes("approved") || n.message.toLowerCase().includes("approved")) && 
                   (n.status === "unread" || n.read === false)
                 );
                 if (approvalNotif) {
                   await markNotificationAsRead(approvalNotif.id);
-                  await loadDashboardNotifications();
+                  // Since we are listening in real time, notifications list updates dynamically!
                 }
               } catch (e) {
                 console.warn("Auto-dismiss approval notification failed:", e);
@@ -373,28 +400,40 @@
           }
         } else {
           badge.classList.add("badge-status-rejected");
+          document.getElementById("pending-status-overlay").classList.add("d-none");
         }
 
         // Fill in Profile Modification form inputs with database values
-        document.getElementById("edit-fullname").value = currentStudentData.fullname;
-        document.getElementById("edit-phone").value = currentStudentData.phone;
-        document.getElementById("edit-gender").value = currentStudentData.gender;
-        document.getElementById("edit-dob").value = currentStudentData.dob;
-        document.getElementById("edit-state").value = currentStudentData.state;
-        document.getElementById("edit-address").value = currentStudentData.address;
-        document.getElementById("edit-bio").value = currentStudentData.bio || "";
+        document.getElementById("edit-fullname").value = data.fullname || "";
+        document.getElementById("edit-phone").value = data.phone || "";
+        document.getElementById("edit-gender").value = data.gender || "";
+        document.getElementById("edit-dob").value = data.dob || "";
+        document.getElementById("edit-state").value = data.state || "";
+        document.getElementById("edit-address").value = data.address || "";
+        document.getElementById("edit-bio").value = data.bio || "";
 
         // Homework submit log badge
-        if (currentStudentData.lastDocumentSubmitted) {
+        if (data.lastDocumentSubmitted) {
           document.getElementById("last-submission-badge").innerHTML = `
-            <a href="${currentStudentData.lastDocumentSubmitted}" target="_blank" class="text-success fw-bold text-decoration-none">
+            <a href="${data.lastDocumentSubmitted}" target="_blank" class="text-success fw-bold text-decoration-none">
               <i class="bi bi-check-circle-fill me-1"></i> View Submitted Material File <i class="bi bi-box-arrow-up-right small"></i>
             </a>`;
+        } else {
+          document.getElementById("last-submission-badge").innerHTML = "";
         }
 
         // Load specific lists
         await loadDashboardLessonMaterials();
-        await loadDashboardNotifications();
+
+        // Subscribe to real-time notifications for our student ID
+        if (data.studentId && !notificationsUnsubscribe) {
+          notificationsUnsubscribe = db.collection("notifications")
+            .onSnapshot(async (snapshot) => {
+              await loadDashboardNotifications();
+            }, (err) => {
+              console.error("Notifications socket subscription error:", err);
+            });
+        }
 
       } catch (err) {
         console.error("Fetch profile failed:", err);

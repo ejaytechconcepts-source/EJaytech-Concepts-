@@ -342,6 +342,32 @@
               </div>
             </div>
           </div>
+
+          <!-- SYSTEM ACTIVITY LOGS -->
+          <div class="card p-4 rounded-3 border bg-white shadow-sm mt-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <div>
+                <h5 class="fw-bold font-display text-dark mb-1"><i class="bi bi-clock-history text-indigo me-1"></i> System Administrative Logs</h5>
+                <p class="text-muted small mb-0">Audited activity log history of administrative approval operations and registry state changes.</p>
+              </div>
+              <button class="btn btn-sm btn-outline-danger" onclick="clearActivityLogs()"><i class="bi bi-trash-fill me-1"></i> Clear Audited Logs</button>
+            </div>
+            <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+              <table class="table table-sm table-hover align-middle mb-0 text-start">
+                <thead class="table-light">
+                  <tr>
+                    <th scope="col" class="small text-muted py-2">Action / Message</th>
+                    <th scope="col" class="small text-muted py-2 text-end">Timestamp</th>
+                  </tr>
+                </thead>
+                <tbody id="activity-logs-tbody">
+                  <tr>
+                    <td colspan="2" class="text-center text-muted py-3 small">No administrative log entries registered yet.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
 
         <!-- PANE 2: INTERACTIVE STUDENT REGISTRY (ADVANCED SORT/FILTER & EXPORT) -->
@@ -842,6 +868,7 @@
         await renderCourseCatalogListing(coursesMasterList);
         await renderMaterialsCatalogListing(materialsMasterList);
         await renderAnnouncementsCatalogListing(announcementsMasterList);
+        await renderActivityLogsListing();
 
         // Populate course dropdown selectors in other panels
         populateSelectorsAndFilters();
@@ -1552,6 +1579,61 @@
         await refreshAllAdminDashboardData();
       } catch (err) {
         alert("Delete failed: " + err.message);
+      }
+    }
+
+
+    /**
+     * Render administrative activity logs
+     */
+    async function renderActivityLogsListing() {
+      const tbody = document.getElementById("activity-logs-tbody");
+      if (!tbody) return;
+
+      try {
+        const logs = await getActivityLogsList();
+        if (logs.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="2" class="text-center text-muted py-3 small">No administrative log entries registered yet.</td></tr>`;
+          return;
+        }
+
+        let html = "";
+        logs.forEach(log => {
+          let dateStr = "";
+          if (log.createdAt) {
+            if (log.createdAt.seconds) {
+              dateStr = new Date(log.createdAt.seconds * 1000).toLocaleString();
+            } else {
+              dateStr = new Date(log.createdAt).toLocaleString();
+            }
+          } else {
+            dateStr = new Date().toLocaleString();
+          }
+
+          html += `
+            <tr>
+              <td class="py-2 small text-dark"><i class="bi bi-info-circle text-primary me-2"></i>${log.message}</td>
+              <td class="py-2 small text-muted text-end font-mono" style="font-size: 0.8rem;">${dateStr}</td>
+            </tr>
+          `;
+        });
+        tbody.innerHTML = html;
+      } catch (err) {
+        console.error("Error rendering activity logs:", err);
+      }
+    }
+
+    /**
+     * Clear all activity logs
+     */
+    async function clearActivityLogs() {
+      if (!confirm("Are you absolutely sure you want to clear all administrative activity logs? This operation is irreversible.")) return;
+      try {
+        await purgeActivityLogs();
+        await refreshAllAdminDashboardData();
+        alert("All administrative logs cleared successfully.");
+      } catch (err) {
+        alert("Failed to clear logs: " + err.message);
       }
     }
 

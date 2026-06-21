@@ -17,11 +17,62 @@ async function getRegisteredStudentsList() {
 }
 
 /**
+ * Record action in activity logs inside Firestore
+ */
+async function logAdminActivity(actionMessage) {
+  const serverTimestamp = (typeof firebase !== "undefined" && firebase.firestore && firebase.firestore.FieldValue)
+    ? firebase.firestore.FieldValue.serverTimestamp()
+    : new Date().toISOString();
+
+  await db.collection("activity_logs").add({
+    message: actionMessage,
+    createdAt: serverTimestamp
+  });
+}
+
+/**
+ * Fetch all activity logs from Firestore sorted by createdAt desc
+ */
+async function getActivityLogsList() {
+  const snapshot = await db.collection("activity_logs").get();
+  const list = [];
+  snapshot.forEach(doc => {
+    list.push({ id: doc.id, ...doc.data() });
+  });
+  return list.sort((a, b) => {
+    const timeA = a.createdAt && a.createdAt.seconds ? a.createdAt.seconds * 1000 : new Date(a.createdAt);
+    const timeB = b.createdAt && b.createdAt.seconds ? b.createdAt.seconds * 1000 : new Date(b.createdAt);
+    return timeB - timeA;
+  });
+}
+
+/**
+ * Clear all activity logs
+ */
+async function purgeActivityLogs() {
+  const snapshot = await db.collection("activity_logs").get();
+  for (const doc of snapshot.docs) {
+    await doc.ref.delete();
+  }
+}
+
+/**
  * Approve student registration
  */
 async function approveStudentApplication(uid, studentId) {
+  const serverTimestamp = (typeof firebase !== "undefined" && firebase.firestore && firebase.firestore.FieldValue)
+    ? firebase.firestore.FieldValue.serverTimestamp()
+    : new Date().toISOString();
+
+  const adminProfile = await getAdminProfile("admin-master");
+  const adminName = adminProfile.username || "Admin Elijah";
+
   // Update student status inside Firestore
-  await db.collection("students").doc(uid).update({ status: "Approved" });
+  await db.collection("students").doc(uid).update({
+    status: "Approved",
+    approvalDate: serverTimestamp,
+    approvedBy: adminName
+  });
 
   // Retrieve student details to construct custom email components
   const studentDoc = await db.collection("students").doc(uid).get();
@@ -31,29 +82,31 @@ async function approveStudentApplication(uid, studentId) {
   const studentName = studentData.fullname || "Student";
   const courseName = studentData.course || "General Software Track";
 
-  const serverTimestamp = (typeof firebase !== "undefined" && firebase.firestore && firebase.firestore.FieldValue)
-    ? firebase.firestore.FieldValue.serverTimestamp()
-    : new Date().toISOString();
+  const notifId = "notif-" + Date.now();
 
   // Create success notification record for the approved user
-  await db.collection("notifications").add({
+  await db.collection("notifications").doc(notifId).set({
+    notificationId: notifId,
     studentId: studentId,
     title: "Application Approved",
-    message: "Congratulations! Your application to EJaytech Concepts has been approved. You may now access your student dashboard and learning resources.",
+    message: `Congratulations!
+
+Your application to EJaytech Concepts has been approved successfully.
+
+You may now access your student dashboard, course information, learning materials, announcements, and future updates.`,
     createdAt: serverTimestamp,
+    isRead: false,
     read: false,
     status: "unread",
     type: "Approval Notification"
   });
 
-  const emailSubject = "Application Approved - EJaytech Concepts";
+  const emailSubject = "Application Approved – EJaytech Concepts";
   const emailMessage = `Dear ${studentName},
 
 Congratulations!
 
-Your application to EJaytech Concepts has been approved successfully.
-
-You can now log in to your student portal and access your course materials and updates.
+We are pleased to inform you that your application to EJaytech Concepts has been approved.
 
 Student ID:
 ${studentId}
@@ -61,8 +114,15 @@ ${studentId}
 Course:
 ${courseName}
 
-Regards,
-EJaytech Concepts`;
+You can now log in to your student dashboard and access your learning resources.
+
+Thank you for choosing EJaytech Concepts.
+
+Best Regards,
+
+EJaytech Concepts
+
+Innovating Ideas, Delivering Solutions.`;
 
   // Standard persistent email database sync log
   await db.collection("emails").add({
@@ -72,6 +132,10 @@ EJaytech Concepts`;
     sentAt: new Date().toISOString(),
     status: "sent"
   });
+
+  // Record action in activity logs
+  const activityMessage = `Admin ${adminName} approved application for Student ID ${studentId} on ${new Date().toLocaleString()}.`;
+  await logAdminActivity(activityMessage);
 
   console.group("%c[EJaytech Email Notification Dispatched]", "color: #10b981; font-weight: bold; font-size: 1.15em;");
   console.log(`To: ${studentEmail}`);
@@ -84,8 +148,19 @@ EJaytech Concepts`;
  * Reject student registration
  */
 async function rejectStudentApplication(uid, studentId) {
+  const serverTimestamp = (typeof firebase !== "undefined" && firebase.firestore && firebase.firestore.FieldValue)
+    ? firebase.firestore.FieldValue.serverTimestamp()
+    : new Date().toISOString();
+
+  const adminProfile = await getAdminProfile("admin-master");
+  const adminName = adminProfile.username || "Admin Elijah";
+
   // Update student status inside Firestore
-  await db.collection("students").doc(uid).update({ status: "Rejected" });
+  await db.collection("students").doc(uid).update({
+    status: "Rejected",
+    rejectionDate: serverTimestamp,
+    rejectedBy: adminName
+  });
 
   // Retrieve student details to construct custom email components
   const studentDoc = await db.collection("students").doc(uid).get();
@@ -94,27 +169,36 @@ async function rejectStudentApplication(uid, studentId) {
   const studentEmail = studentData.email || "";
   const studentName = studentData.fullname || "Student";
 
-  const serverTimestamp = (typeof firebase !== "undefined" && firebase.firestore && firebase.firestore.FieldValue)
-    ? firebase.firestore.FieldValue.serverTimestamp()
-    : new Date().toISOString();
+  const notifId = "notif-" + Date.now();
 
   // Create notifications record warning logs
-  await db.collection("notifications").add({
+  await db.collection("notifications").doc(notifId).set({
+    notificationId: notifId,
     studentId: studentId,
     title: "Application Not Approved",
-    message: "Thank you for your interest in EJaytech Concepts. Your application was not approved at this time.",
+    message: `Thank you for applying to EJaytech Concepts.
+
+After reviewing your application, we are unable to approve it at this time.
+
+For further enquiries, please contact the administration.`,
     createdAt: serverTimestamp,
+    isRead: false,
     read: false,
     status: "unread",
     type: "Rejection Notification"
   });
 
-  const emailSubject = "Application Not Approved";
+  const emailSubject = "Application Status Update – EJaytech Concepts";
   const emailMessage = `Dear ${studentName},
 
-Thank you for your interest in EJaytech Concepts. Your application was not approved at this time.
+Thank you for your interest in EJaytech Concepts.
+
+After reviewing your application, we are unable to approve it at this time.
+
+For additional information, please contact the administration.
 
 Regards,
+
 EJaytech Concepts`;
 
   // Standard persistent email database sync log
@@ -125,6 +209,10 @@ EJaytech Concepts`;
     sentAt: new Date().toISOString(),
     status: "sent"
   });
+
+  // Record action in activity logs
+  const activityMessage = `Admin ${adminName} rejected application for Student ID ${studentId} on ${new Date().toLocaleString()}.`;
+  await logAdminActivity(activityMessage);
 
   console.group("%c[EJaytech Email Notification Dispatched]", "color: #ef4444; font-weight: bold; font-size: 1.15em;");
   console.log(`To: ${studentEmail}`);
