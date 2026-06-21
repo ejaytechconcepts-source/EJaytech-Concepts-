@@ -41,6 +41,18 @@
       <p class="text-muted mt-3 font-display">Synchronizing secure student credentials...</p>
     </div>
 
+    <!-- Error/Notice Screen Overlay (Hidden by default) -->
+    <div class="text-center py-5 d-none mx-auto" id="dash-error-screen" style="max-width: 500px;">
+      <div class="rounded-circle p-3 mb-3 d-inline-flex justify-content-center align-items-center bg-danger-subtle text-danger" style="width: 70px; height: 70px;">
+        <i class="bi bi-exclamation-triangle-fill text-danger" style="font-size: 2.2rem;"></i>
+      </div>
+      <h4 class="fw-bold text-dark font-display mb-3" id="dash-error-title">Unable to Load Profile</h4>
+      <p class="text-secondary mb-4 leading-relaxed id-error-msg" id="dash-error-message"></p>
+      <div class="d-flex flex-column gap-2 justify-content-center align-items-center" id="dash-error-actions">
+        <!-- Buttons injected dynamically -->
+      </div>
+    </div>
+
     <!-- Active Grid Workspace (Visible once loaded) -->
     <div class="row g-4 d-none" id="active-dashboard-grid">
       
@@ -293,25 +305,114 @@
     let studentUnsubscribe = null;
     let notificationsUnsubscribe = null;
 
+    let loadTimeout = null;
+    let loadedSuccessfully = false;
+
+    function clearLoadTimeout() {
+      if (loadTimeout) {
+        clearTimeout(loadTimeout);
+        loadTimeout = null;
+      }
+    }
+
+    /**
+     * Show UI state for search failures, server errors, authentication anomalies, or connection timeouts
+     */
+    function showErrorState(title, message, includeContactButton = true) {
+      // Ensure current spinner and core layouts are hidden
+      document.getElementById("dash-loading-screen").classList.add("d-none");
+      document.getElementById("active-dashboard-grid").classList.add("d-none");
+      
+      const errorScreen = document.getElementById("dash-error-screen");
+      if (errorScreen) {
+        errorScreen.classList.remove("d-none");
+      }
+      
+      const errorTitleEl = document.getElementById("dash-error-title");
+      if (errorTitleEl) {
+        errorTitleEl.textContent = title;
+      }
+      
+      const errorMsgEl = document.getElementById("dash-error-message");
+      if (errorMsgEl) {
+        errorMsgEl.textContent = message;
+      }
+      
+      const actionsContainer = document.getElementById("dash-error-actions");
+      if (actionsContainer) {
+        let html = `<button onclick="window.location.reload()" class="btn btn-dark fw-bold px-4 py-2"><i class="bi bi-arrow-clockwise me-2"></i> Refresh Workspace</button>`;
+        if (includeContactButton) {
+          html += `<a href="mailto:elijahyahuza@gmail.com" class="btn btn-outline-danger fw-bold px-4 py-2 mt-2" id="contact-admin-btn"><i class="bi bi-envelope-fill me-2"></i> Contact Administrator</a>`;
+        }
+        actionsContainer.innerHTML = html;
+      }
+    }
+
     auth.onAuthStateChanged(async (user) => {
+      const authEmail = user ? user.email : "none";
+      const authUid = user ? user.uid : "none";
+      console.log(`[Authentication Status] Changed. UID: ${authUid} | Email: ${authEmail}`);
+
       if (user) {
         document.getElementById("user-display-email").textContent = user.email;
         
-        // Unsubscribe legacy queries
+        // Reset tracking states for this connection session
+        loadedSuccessfully = false;
+        clearLoadTimeout();
+
+        // Safety limit trigger - Never allow infinite loading. After 10s show error options.
+        loadTimeout = setTimeout(() => {
+          if (!loadedSuccessfully) {
+            console.error(`[Loading Failure] Registration profile retrieval timed out after 10 seconds for UID: ${user.uid}`);
+            showErrorState(
+              "Connection Timeout",
+              "Unable to load student profile. Please refresh or contact support."
+            );
+          }
+        }, 10000);
+
+        // Unsubscribe any legacy listener blocks to avoid dual renders
         if (studentUnsubscribe) studentUnsubscribe();
         if (notificationsUnsubscribe) notificationsUnsubscribe();
 
-        // Establish real-time observer of student doc in Firestore
+        console.log(`[Firestore Query] Initiating student profile lookup matching UID: ${user.uid}`);
+
+        // Establish real-time observer of student doc in Firestore matching Auth UID
         studentUnsubscribe = db.collection("students").doc(user.uid).onSnapshot(async (doc) => {
-          if (doc.exists) {
-            const data = doc.data();
-            currentStudentData = data;
-            await renderStudentDashboardWithData(data, user.uid);
+          try {
+            console.log(`[Firestore Query Result] Status updated. Doc ID: ${doc.id} | Exists: ${doc.exists}`);
+
+            if (doc.exists) {
+              const data = doc.data();
+              currentStudentData = data;
+              loadedSuccessfully = true;
+              clearLoadTimeout();
+
+              // Clear past error wrappers if any were showing
+              const errorScreen = document.getElementById("dash-error-screen");
+              if (errorScreen) errorScreen.classList.add("d-none");
+
+              await renderStudentDashboardWithData(data, user.uid);
+            } else {
+              console.warn(`[Loading Failure] Profile lookup returned empty (no document) for UID: ${user.uid}`);
+              loadedSuccessfully = true;
+              clearLoadTimeout();
+              showErrorState("Student Profile Not Found", "Student profile not found.", true);
+            }
+          } catch (handlerErr) {
+            console.error(`[Loading Failure] Error rendering workspace layout:`, handlerErr);
+            loadedSuccessfully = true;
+            clearLoadTimeout();
+            showErrorState("Renderer Setup Error", "Could not assemble student dashboard layouts: " + handlerErr.message, true);
           }
         }, (err) => {
-          console.error("Student profile real-time listening error:", err);
+          console.error(`[Loading Failure] Firestore event streaming triggered unauthorized or connection error:`, err);
+          loadedSuccessfully = true;
+          clearLoadTimeout();
+          showErrorState("Database Authorization Error", err.message, true);
         });
       } else {
+        clearLoadTimeout();
         if (studentUnsubscribe) { studentUnsubscribe(); studentUnsubscribe = null; }
         if (notificationsUnsubscribe) { notificationsUnsubscribe(); notificationsUnsubscribe = null; }
       }
@@ -325,45 +426,63 @@
         const data = await getStudentProfile(uid);
         await renderStudentDashboardWithData(data, uid);
       } catch (err) {
-        console.error("renderStudentDashboard failure:", err);
+        console.error("[Loading Failure] Direct renderStudentDashboard failed:", err);
       }
     }
 
     /**
-     * Primary renderer using live/incoming document data
+     * Primary renderer using live/incoming document data (implements strict fallback values for all missing fields)
      */
     async function renderStudentDashboardWithData(data, uid) {
       try {
-        currentStudentData = data;
+        currentStudentData = data || {};
         
         // Hide loader, show grid
         document.getElementById("dash-loading-screen").classList.add("d-none");
         document.getElementById("active-dashboard-grid").classList.remove("d-none");
 
-        // Display basic variables on profile card
-        document.getElementById("student-fullname-display").textContent = data.fullname || "Student";
-        document.getElementById("student-id-display").textContent = data.studentId || "";
-        document.getElementById("student-course-display").textContent = data.course || "Pending";
-        document.getElementById("student-email-display").textContent = data.email || "";
-        document.getElementById("student-phone-display").textContent = data.phone || "";
-        document.getElementById("student-dob-display").textContent = data.dob || "";
-        document.getElementById("student-bio-display").textContent = data.bio || "No custom bio statement specified. Edit your profile to tell us about your digital goals!";
+        // Display basic variables on profile card with robust fallback values for missing Firestore fields
+        const fullnameVal = data.fullname || "Student";
+        const studentIdVal = data.studentId || "EJ-PENDING";
+        const courseVal = data.course || "General Software Track";
         
-        // Set initials avatar
-        const initials = data.fullname ? data.fullname.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : "ST";
+        // Use authenticated email fallback if the Firestore records' email is empty
+        const emailVal = data.email || (auth.currentUser ? auth.currentUser.email : "") || "Not Specified";
+        const phoneVal = data.phone || "Not Specified";
+        const dobVal = data.dob || "Not Specified";
+        const bioVal = data.bio || "No custom bio statement specified. Edit your profile to tell us about your digital goals!";
+
+        document.getElementById("student-fullname-display").textContent = fullnameVal;
+        document.getElementById("student-id-display").textContent = studentIdVal;
+        document.getElementById("student-course-display").textContent = courseVal;
+        document.getElementById("student-email-display").textContent = emailVal;
+        document.getElementById("student-phone-display").textContent = phoneVal;
+        document.getElementById("student-dob-display").textContent = dobVal;
+        document.getElementById("student-bio-display").textContent = bioVal;
+        
+        // Set initials avatar safely
+        let initials = "ST";
+        if (fullnameVal && fullnameVal.trim()) {
+          const parts = fullnameVal.trim().split(/\s+/).map(n => n ? n[0] : "").filter(Boolean);
+          if (parts.length > 0) {
+            initials = parts.join("").substring(0, 2).toUpperCase();
+          }
+        }
         document.getElementById("student-avatar").textContent = initials;
 
-        // Dynamic badges
+        // Dynamic status badges
         const badge = document.getElementById("student-status-badge");
         badge.className = "badge border badge-status";
-        badge.textContent = data.status;
+        
+        const statusVal = data.status || "Pending";
+        badge.textContent = statusVal;
 
-        if (data.status === "Pending") {
+        if (statusVal === "Pending") {
           badge.classList.add("badge-status-pending");
           document.getElementById("pending-status-overlay").classList.remove("d-none");
           // Limit classroom tabs in pending state by blurring container
           document.getElementById("classroom-approved-workspace").style.opacity = "0.75";
-        } else if (data.status === "Approved") {
+        } else if (statusVal === "Approved") {
           badge.classList.add("badge-status-approved");
           document.getElementById("pending-status-overlay").classList.add("d-none");
           document.getElementById("classroom-approved-workspace").style.opacity = "1";
@@ -384,7 +503,7 @@
             // Automatically check and mark any unread approval notification as read
             setTimeout(async () => {
               try {
-                const list = await getStudentNotifications(data.studentId);
+                const list = await getStudentNotifications(studentIdVal);
                 const approvalNotif = list.find(n => 
                   (n.title.toLowerCase().includes("approved") || n.message.toLowerCase().includes("approved")) && 
                   (n.status === "unread" || n.read === false)
@@ -426,7 +545,7 @@
         await loadDashboardLessonMaterials();
 
         // Subscribe to real-time notifications for our student ID
-        if (data.studentId && !notificationsUnsubscribe) {
+        if (!notificationsUnsubscribe) {
           notificationsUnsubscribe = db.collection("notifications")
             .onSnapshot(async (snapshot) => {
               await loadDashboardNotifications();
